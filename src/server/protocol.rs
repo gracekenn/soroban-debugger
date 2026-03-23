@@ -93,6 +93,7 @@ pub enum DebugResponse {
     /// Inspection result
     InspectionResult {
         function: Option<String>,
+        args: Option<String>,
         step_count: u64,
         paused: bool,
         call_stack: Vec<String>,

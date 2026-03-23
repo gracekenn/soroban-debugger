@@ -166,7 +166,19 @@ export class SorobanDebugSession extends DebugSession {
     response: DebugProtocol.ScopesResponse,
     args: DebugProtocol.ScopesArguments
   ): Promise<void> {
+    // Rebuild handles each time to reflect the latest paused state.
+    this.variableHandles.clear();
+    this.nextVarHandle = 1;
+
     const scopes: DebugProtocol.Scope[] = [];
+
+    const argsRef = this.nextVarHandle++;
+    this.variableHandles.set(argsRef, this.argsToVariables(this.state.args));
+    scopes.push({
+      name: 'Arguments',
+      variablesReference: argsRef,
+      expensive: false
+    });
 
     if (this.state.variables && this.state.variables.length > 0) {
       const variablesRef = this.nextVarHandle++;
@@ -439,7 +451,75 @@ export class SorobanDebugSession extends DebugSession {
       line: 1,
       column: 1
     }));
+    this.state.args = inspection.args;
     this.state.variables = this.storageToVariables(storage);
+  }
+
+  private argsToVariables(args: string | undefined): Variable[] {
+    if (!args) {
+      return [{
+        name: '(args)',
+        value: '(none)',
+        type: 'string',
+        variablesReference: 0
+      }];
+    }
+
+    try {
+      const parsed = JSON.parse(args);
+      return this.valueToVariables(parsed, 'arg');
+    } catch {
+      return [{
+        name: '(args)',
+        value: args,
+        type: 'string',
+        variablesReference: 0
+      }];
+    }
+  }
+
+  private valueToVariables(value: any, keyPrefix: string): Variable[] {
+    if (Array.isArray(value)) {
+      return value.slice(0, 100).map((item, index) => this.makeVariable(`${keyPrefix}${index}`, item));
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.keys(value)
+        .sort((a, b) => a.localeCompare(b))
+        .slice(0, 100)
+        .map((key) => this.makeVariable(key, value[key]));
+    }
+
+    return [this.makeVariable(keyPrefix, value)];
+  }
+
+  private makeVariable(name: string, value: any): Variable {
+    if (value === null || value === undefined) {
+      return { name, value: String(value), type: 'null', variablesReference: 0 };
+    }
+
+    if (typeof value === 'string') {
+      return { name, value, type: 'string', variablesReference: 0 };
+    }
+
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return { name, value: String(value), type: typeof value, variablesReference: 0 };
+    }
+
+    if (Array.isArray(value)) {
+      const ref = this.nextVarHandle++;
+      this.variableHandles.set(ref, this.valueToVariables(value, `${name}[`));
+      return { name, value: `Array(${value.length})`, type: 'array', variablesReference: ref };
+    }
+
+    if (typeof value === 'object') {
+      const keys = Object.keys(value);
+      const ref = this.nextVarHandle++;
+      this.variableHandles.set(ref, this.valueToVariables(value, name));
+      return { name, value: `Object(${keys.length})`, type: 'object', variablesReference: ref };
+    }
+
+    return { name, value: String(value), type: typeof value, variablesReference: 0 };
   }
 
   private storageToVariables(storage: Record<string, unknown>): Variable[] {
@@ -468,6 +548,7 @@ export class SorobanDebugSession extends DebugSession {
     this.state.isPaused = false;
     this.state.callStack = [];
     this.state.variables = [];
+    this.state.args = undefined;
     this.hasExecuted = false;
     this.sourceFunctionBreakpoints.clear();
     this.functionBreakpointRefCounts.clear();

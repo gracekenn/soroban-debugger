@@ -22,6 +22,7 @@ export interface DebuggerExecutionResult {
 
 export interface DebuggerInspection {
   function?: string;
+  args?: string;
   stepCount: number;
   paused: boolean;
   callStack: string[];
@@ -53,7 +54,7 @@ type DebugResponse =
   | { type: 'ExecutionResult'; success: boolean; output: string; error?: string; paused: boolean; completed: boolean }
   | { type: 'StepResult'; paused: boolean; current_function?: string; step_count: number }
   | { type: 'ContinueResult'; completed: boolean; output?: string; error?: string; paused: boolean }
-  | { type: 'InspectionResult'; function?: string; step_count: number; paused: boolean; call_stack: string[] }
+  | { type: 'InspectionResult'; function?: string; args?: string; step_count: number; paused: boolean; call_stack: string[] }
   | { type: 'StorageState'; storage_json: string }
   | { type: 'SnapshotLoaded'; summary: string }
   | { type: 'BreakpointSet'; function: string }
@@ -183,6 +184,7 @@ export class DebuggerProcess {
     this.expectResponse(response, 'InspectionResult');
     return {
       function: response.function,
+      args: response.args,
       stepCount: response.step_count,
       paused: response.paused,
       callStack: response.call_stack

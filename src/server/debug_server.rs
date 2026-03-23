@@ -298,6 +298,7 @@ impl DebugServer {
                                 .collect();
                             DebugResponse::InspectionResult {
                                 function: state.current_function().map(|s| s.to_string()),
+                                args: state.current_args().map(|s| s.to_string()),
                                 step_count: state.step_count() as u64,
                                 paused: engine.is_paused(),
                                 call_stack,

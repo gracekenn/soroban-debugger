@@ -26,40 +26,42 @@ async function main(): Promise<void> {
     return;
   }
 
-  const contractPath = path.join(repoRoot, 'tests', 'fixtures', 'wasm', 'counter.wasm');
+  const contractPath = path.join(repoRoot, 'tests', 'fixtures', 'wasm', 'echo.wasm');
   assert.ok(fs.existsSync(contractPath), `Missing fixture WASM: ${contractPath}`);
 
   const debuggerProcess = new DebuggerProcess({
     binaryPath,
     contractPath,
-    entrypoint: 'increment',
-    args: []
+    entrypoint: 'echo',
+    args: ['7']
   });
 
   await debuggerProcess.start();
   await debuggerProcess.ping();
 
-  const sourcePath = path.join(repoRoot, 'tests', 'fixtures', 'contracts', 'counter', 'src', 'lib.rs');
+  const sourcePath = path.join(repoRoot, 'tests', 'fixtures', 'contracts', 'echo', 'src', 'lib.rs');
   const exportedFunctions = await debuggerProcess.getContractFunctions();
-  const resolvedBreakpoints = resolveSourceBreakpoints(sourcePath, [9, 19], exportedFunctions);
-  assert.equal(resolvedBreakpoints[0].verified, true, 'Expected increment breakpoint to resolve');
-  assert.equal(resolvedBreakpoints[0].functionName, 'increment');
-  assert.equal(resolvedBreakpoints[1].verified, true, 'Expected get breakpoint to resolve');
-  assert.equal(resolvedBreakpoints[1].functionName, 'get');
+  const resolvedBreakpoints = resolveSourceBreakpoints(sourcePath, [10], exportedFunctions);
+  assert.equal(resolvedBreakpoints[0].verified, true, 'Expected echo breakpoint to resolve');
+  assert.equal(resolvedBreakpoints[0].functionName, 'echo');
 
-  await debuggerProcess.setBreakpoint('increment');
+  await debuggerProcess.setBreakpoint('echo');
   const paused = await debuggerProcess.execute();
   assert.equal(paused.paused, true, 'Expected breakpoint to pause before execution');
 
+  const pausedInspection = await debuggerProcess.inspect();
+  assert.match(pausedInspection.args || '', /7/, 'Expected paused inspection to include call args');
+
   const resumed = await debuggerProcess.continueExecution();
-  assert.match(resumed.output || '', /I64\(1\)/, 'Expected continue() to finish increment()');
-  await debuggerProcess.clearBreakpoint('increment');
+  assert.match(resumed.output || '', /7/, 'Expected continue() to finish echo()');
+  await debuggerProcess.clearBreakpoint('echo');
 
   const result = await debuggerProcess.execute();
-  assert.match(result.output, /I64\(2\)/, 'Expected second increment() to return I64(2)');
+  assert.match(result.output, /7/, 'Expected second echo() to return the input');
 
   const inspection = await debuggerProcess.inspect();
   assert.ok(Array.isArray(inspection.callStack), 'Expected call stack array from inspection');
+  assert.match(inspection.args || '', /7/, 'Expected inspection to include args');
 
   const storage = await debuggerProcess.getStorage();
   assert.ok(typeof storage === 'object' && storage !== null, 'Expected storage snapshot object');
